@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+	<data>
+
+		<template id="assets_backend_followup" name="account_reports_format_assets" inherit_id="web.assets_backend">
+		    <xpath expr="." position="inside">
+		        <script type="text/javascript" src="/customer_statement_formate/static/src/js/followup_controller.js"></script>
+		    </xpath>
+		</template>
+
+	</data>
+</odoo>

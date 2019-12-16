@@ -12,13 +12,11 @@ from datetime import datetime
 import xlwt
 import xlsxwriter
 from xlsxwriter.workbook import Workbook
-import StringIO
+import io
+import json
 
 
-
-
-
-class Report_account_followup_report(models.AbstractModel):
+class AccountFollowupReport(models.AbstractModel):
     _inherit = "account.followup.report"
 
     @api.model
@@ -26,64 +24,31 @@ class Report_account_followup_report(models.AbstractModel):
         return 'customer_statement_formate.report_customer_overdue'
 
 
+    @api.model
+    def print_pdf_followups(self, records):
+        """
+        Print one or more followups in one PDF
+        records contains either a list of records (come from an server.action) or a field 'ids' which contains a list of one id (come from JS)
+        """
+        res_ids = records['ids'] if 'ids' in records else records.ids  # records come from either JS or server.action
+        self.env['res.partner'].browse(res_ids).message_post(
+            body=_('Sent a followup letter'), subtype='account_reports.followup_logged_action')
+        return self.env.ref('customer_statement_formate.action_report_customer_overdue').report_action(res_ids)
 
-class account_report_context_followup(models.TransientModel):
-    _inherit = 'account.report.context.followup'
+class account_report_context_followup(models.AbstractModel):
+    _inherit = 'res.partner'
 
+    def get_lines(self, partner_id):
+        lines = self.env['account.followup.report']._get_lines({'partner_id': partner_id})
+        return lines
 
-    def get_pdf_report(self, log=False):
-        bodies = []
-        headers = []
-        footers = []
+    def get_xlsx_report(self, options):
         for context in self:
-            context = context.with_context(lang=context.partner_id.lang)
-            report_obj = context.get_report_obj()
-            lines = report_obj.get_lines(context, public=True)
-            for line in lines:
-                a = line['columns'][-1].replace("&nbsp;", ' ')
-                am = a.split(' ',1)
-                due_amount = float(am[-1].encode('utf-8').replace(',',''))
-                line['columns'][-1] = due_amount
-            base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
-            rcontext = {
-                'context': context,
-                'report': report_obj,
-                'lines': lines,
-                'mode': 'print',
-                'base_url': base_url,
-                'css': '',
-                'o': self.env.user,
-                'today': context._formatLangDate(datetime.today()),
-                'company': self.env.user.company_id,
-                'res_company': self.env.user.company_id,
-            }
-            html = context.env['ir.ui.view'].render_template(report_obj.get_pdf_template(), rcontext)
-            bodies.append((0, html))
-            header = self.env['ir.ui.view'].render_template("customer_statement_formate.customer_due_stmt_custom_layout_header", rcontext)
-            rcontext['body'] = header
-            header = self.env['ir.ui.view'].render_template("report.minimal_layout", rcontext)
-            footer = self.env['ir.ui.view'].render_template("customer_statement_formate.customer_stmt_due_custom_layout_footer", rcontext)
-            rcontext['body'] = footer
-            rcontext['subst'] = True
-            footer = self.env['ir.ui.view'].render_template("report.minimal_layout", rcontext)
-            headers.append(header)
-            footers.append(footer)
-
-            rcontext['subst'] = True
-            if log:
-                msg = _('Sent a followup letter')
-                context.partner_id.message_post(body=msg, subtype='account_reports.followup_logged_action')
-
-        return self.env['report']._run_wkhtmltopdf(headers, footers, bodies, False, self.env.user.company_id.paperformat_id)
-
-
-    def get_xlsx_report(self, response):
-        for context in self:
-            context = context.with_context(lang=context.partner_id.lang)
-            report_obj = context.get_report_obj()
-            lines = report_obj.get_lines(context, public=True)
+            partner = context
+            context = context.with_context(lang=partner.lang)
+            lines = context.env['account.followup.report']._get_lines({'partner_id': partner.id})
             company = self.env.user.company_id
-            output = StringIO.StringIO()
+            output = io.BytesIO()
             workbook = xlsxwriter.Workbook(output, {'in_memory': True})
             worksheet = workbook.add_worksheet('Sheet1')
             worksheet.set_paper(9)
@@ -126,32 +91,32 @@ class account_report_context_followup(models.TransientModel):
                 line4 = company.partner_id.street2
             elif not company.partner_id.street2 and company.partner_id.city:
                 line4 = company.partner_id.city
-            worksheet.write(4, 7, line4 + ',FAX:'+ company.partner_id.fax if company.partner_id.fax else '')
+            # worksheet.write(4, 7, line4 + ',FAX:'+ company.partner_id.fax if company.partner_id.fax else '')
             worksheet.write(5, 7, company.partner_id.country_id and company.partner_id.country_id.name or '')
             worksheet.write(7, 7, 'VAT Reg. No.' + company.partner_id.vat if company.partner_id.vat else '')
             worksheet.write(10, 4, 'SALES STATEMENT')
             worksheet.write(12, 7, 'Account    '+ company.partner_id.ref if company.partner_id.ref else '')
-            worksheet.write(12, 1, context.partner_id.name)
+            worksheet.write(12, 1, partner.name)
 
-            worksheet.write(13, 1, context.partner_id.street if context.partner_id.street else '')
+            worksheet.write(13, 1, partner.street if partner.street else '')
             worksheet.write(14, 7, 'Date   '+datetime.now().strftime('%d %b %y'))
             line6 = ''
-            if context.partner_id.zip and context.partner_id.city:
-                line6 = context.partner_id.zip + ' '+ context.partner_id.city
-            elif context.partner_id.zip and not context.partner_id.city:
-                line6 = context.partner_id.zip
-            elif not context.partner_id.zip and context.partner_id.city:
-                line6 = context.partner_id.city
-            worksheet.write(14, 1, context.partner_id.street2 if context.partner_id.street2 else '')
+            if partner.zip and partner.city:
+                line6 = partner.zip + ' '+ partner.city
+            elif partner.zip and not partner.city:
+                line6 = partner.zip
+            elif not partner.zip and partner.city:
+                line6 = partner.city
+            worksheet.write(14, 1, partner.street2 if partner.street2 else '')
             worksheet.write(15, 1, line6)
-            worksheet.write(16, 1, context.partner_id.country_id.name if context.partner_id.country_id.name else '')
+            worksheet.write(16, 1, partner.country_id.name if partner.country_id.name else '')
             line7 = ''
-            if context.partner_id.phone and context.partner_id.mobile:
-                line7 = context.partner_id.phone + '/' +  context.partner_id.mobile
-            elif context.partner_id.phone and not context.partner_id.mobile:
-                line7 = context.partner_id.phone
-            elif not context.partner_id.phone and context.partner_id.mobile:
-                line7 = context.partner_id.mobile
+            if partner.phone and partner.mobile:
+                line7 = partner.phone + '/' +  partner.mobile
+            elif partner.phone and not partner.mobile:
+                line7 = partner.phone
+            elif not partner.phone and partner.mobile:
+                line7 = partner.mobile
             worksheet.write(17, 1, line7)
 
             worksheet.write(20, 1, 'Date', style)
@@ -171,14 +136,14 @@ class account_report_context_followup(models.TransientModel):
             total_credits = 0
             for line in lines:
                 line_2 = line_2 + 1
-                if line['type'] != 'total':
-                    a = line['columns'][-1].replace("&nbsp;", ' ')
-                    am = a.split(' ',1)
-                    due_amount = float(am[-1].encode('utf-8').replace(',',''))
+                if 'type' in line and line.get('type') != 'total' and line.get('columns'):
+                    a = line['columns'][-1]
+                    am = a['name'].split(' ',1)
+                    due_amount = float(am[-1].replace(',', ''))
                     l = context.env['account.move.line'].browse(line['id'])
                     if l.journal_id.code == 'INV':
                         due_inv_total = due_inv_total + due_amount
-                        date_diff = datetime.strptime(l.date_maturity, '%Y-%m-%d') - datetime.now()
+                        date_diff = l.date_maturity - datetime.now().date()
                         date_days = int(date_diff.days)
                         if date_days < 30:
                             thirtydays = thirtydays + due_amount
@@ -188,7 +153,7 @@ class account_report_context_followup(models.TransientModel):
                             ninetydays = ninetydays + due_amount
                         if date_days > 90:
                             ninetyplusdays = ninetyplusdays + due_amount
-                    worksheet.write(line_2, 1, datetime.strptime(l.date, '%Y-%m-%d').strftime('%d %b %y'))
+                    worksheet.write(line_2, 1, l.date.strftime('%d %b %y'))
                     worksheet.write(line_2, 2, l.journal_id.code)
                     worksheet.write(line_2, 3, l.move_id.name if l.move_id.name else '')
                     worksheet.write(line_2, 4, l.name)
@@ -233,9 +198,5 @@ class account_report_context_followup(models.TransientModel):
 
             workbook.close()
             output.seek(0)
-            response.stream.write(output.read())
+            options.stream.write(output.read())
             output.close()
-
-
-
-

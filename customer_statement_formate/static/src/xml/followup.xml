@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<templates>
+    
+    <t t-extend="CustomerStatements.buttons">
+        <t t-jquery="button.o_account_reports_followup_print_letter_button" t-operation="after">
+            <button type="button" class="btn btn-primary o_account_reports_followup_print_pdf_button">
+                Print PDF
+            </button>
+            <button type="button" action="print_xlsx" class="btn btn-primary o_account_reports_followup_print_xlsx_button">
+                Print XLSX
+            </button>
+        </t>
+    </t>
+
+</templates>

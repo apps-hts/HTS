@@ -22,9 +22,8 @@ class FinancialReportControllerNew(FinancialReportController):
     def followupme(self, output_format, partners, token, **kw):
         uid = request.session.uid
         try:
-            context_obj = request.env['account.report.context.followup']
+            context_obj = request.env['account.followup.report']
             partners = request.env['res.partner'].browse([int(i) for i in partners.split(',')])
-            context_ids = context_obj.search([('partner_id', 'in', partners.ids), ('create_uid', '=', uid)])
             if output_format == 'xlsx':
                 response = request.make_response(
                     None,
@@ -33,20 +32,10 @@ class FinancialReportControllerNew(FinancialReportController):
                         ('Content-Disposition', 'attachment; filename=payment_reminder.xlsx;')
                     ]
                 )
-                context_ids.get_xlsx_report(response)
+                partners.get_xlsx_report(response)
                 response.set_cookie('fileToken', token)
                 return response
-            else:
-                response = request.make_response(
-                    context_ids.with_context(public=True).get_pdf_report(log=True),
-                    headers=[
-                        ('Content-Type', 'application/pdf'),
-                        ('Content-Disposition', 'attachment; filename=payment_reminder.pdf;')
-                    ]
-                )
-                response.set_cookie('fileToken', token)
-                return response
-        except Exception, e:
+        except Exception as e:
             se = _serialize_exception(e)
             error = {
                 'code': 200,
