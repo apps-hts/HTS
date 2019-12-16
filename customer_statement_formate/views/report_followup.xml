@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <template id="report_followup_body_new" inherit_id="account_reports.report_followup_body">
+            <xpath expr="//button[contains(@class,'followup-letter')]" position="after">
+                <button data-primary='1' class="btn btn-primary followup-letter" t-att-data-target="'/account_reports/followup_report/pdf/' + str(context.partner_id.id) + '/'" t-att-data-partner="str(context.partner_id.id)">Print PDF</button>
+                <button data-primary='1' class="btn btn-primary followup-letter" t-att-data-target="'/account_reports/followup_report/xlsx/' + str(context.partner_id.id) + '/'" t-att-data-partner="str(context.partner_id.id)">Print XLSX</button>
+            </xpath>
+        </template>
+
+        <template id="customer_due_stmt_custom_layout_header">
+            <div class="header">
+                <div class="row">
+                    <div class="col-xs-12 text-right" name="company_address">
+                        <strong><span t-field="company.partner_id.name"/></strong>
+                        <br/>
+                        <span t-field="company.partner_id.street"/> - <span t-field="company.partner_id.zip"/><br/>
+                        <span>MOBILES :     </span><span t-if="company.partner_id.phone" t-field="company.partner_id.phone"> / </span><span t-field="company.partner_id.mobile"/><br/>
+                        <span t-if="company.partner_id.street2" t-field="company.partner_id.street2">,</span> <span t-field="company.partner_id.city"/><span t-if="company.partner_id.fax" t-field="company.partner_id.fax">, FAX:</span>
+                        <br/>
+                        <span t-field="company.partner_id.country_id.name"/><br/><br/>
+                        <span t-if="company.partner_id.vat"> VAT Reg. No.      </span><span t-if="company.partner_id.vat" t-field="company.partner_id.vat"/>
+                    </div>
+                </div>
+            </div>
+        </template>
+        <template id="customer_stmt_due_custom_layout_footer">
+            <div class="footer">
+            </div>
+        </template>
+        <template id="report_followup_letter_doc">
+            <div class="page">
+                <div class="row">
+                    <div class="col-xs-12 text-center" >
+                        <b>SALES STATEMENT</b>
+                    </div>
+                </div>
+                <br/>
+                <div class="row">
+                    <div class="col-xs-6" style="margin-left: 15px;">
+                        <div t-field="context.partner_id" 
+                            t-field-options='{"widget": "contact", "fields": ["address", "name", "phone", "fax"], "no_marker": True}'/>
+                    </div>
+                    <div class="col-xs-5 text-right">
+                        <span t-if="company.partner_id.ref">Account</span>&#160;&#160;&#160;&#160;&#160;<span t-esc="company.partner_id.ref"/><br/><br/> 
+                        <span>Date</span>&#160;&#160;&#160;&#160;&#160;<span t-esc="datetime.datetime.now().strftime('%d %b %y')"/><br/>
+                    </div>
+                </div>
+                <br/>
+                <br/>
+                <br/>
+                <table class="table">
+                    <thead>
+                        <tr style="border-top: 1px solid; border-bottom: 1px solid; text-align: center;" width="100%">
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Reference Number</th>
+                            <th>Description</th>
+                            <th><span t-field="company.currency_id.name"/><br/>Debit</th>
+                            <th><span t-field="company.currency_id.name"/><br/>Credit</th>
+                            <th><span t-field="company.currency_id.name"/><br/>Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody style="borer: 0px;">
+                        <t t-set="due_inv_total" t-value="0"/>
+                        <t t-set="thirtydays" t-value="0"/>
+                        <t t-set="sixtydays" t-value="0"/>
+                        <t t-set="ninetydays" t-value="0"/>
+                        <t t-set="ninetyplusdays" t-value="0"/>
+                        <t t-set="total_outstanding" t-value="0"/>
+                        <t t-set="credits" t-value="0"/>
+                        <t t-foreach="lines" t-as="line">
+                            <tr width="100%">
+                            <t t-if="line['type'] != 'total'">
+                                <t t-set="l" t-value="request.env['account.move.line'].browse(line['id'])"/>
+                                    <td><t t-if="l.date"> <span t-esc="datetime.datetime.strptime(l.date, '%Y-%m-%d').strftime('%d %b %y')"/></t></td>
+                                    <td><span t-esc="l.journal_id.code"/></td>
+                                    <t t-if="l.journal_id.code == 'INV'">
+                                        <t t-set="due_inv_total" t-value="due_inv_total + line['columns'][-1]"/>
+                                        <t t-set="date_diff" t-value="datetime.datetime.strptime(l.date_maturity, '%Y-%m-%d') - datetime.datetime.now()"/>
+                                        <t t-set="date_days" t-value="int(date_diff.days)"/>
+                                        <t t-if="date_days &lt; 30">
+                                            <t t-set="thirtydays" t-value="thirtydays + line['columns'][-1]"/>
+                                        </t>
+                                        <t t-if="(date_days &gt; 30) and (date_days &lt; 60)">
+                                            <t t-set="sixtydays" t-value="sixtydays + line['columns'][-1]"/>
+                                        </t>
+                                        <t t-if="(date_days &gt; 60) and (date_days &lt; 90)">
+                                            <t t-set="ninetydays" t-value="ninetydays + line['columns'][-1]"/>
+                                        </t>
+                                        <t t-if="date_days &gt; 90">
+                                            <t t-set="ninetyplusdays" t-value="ninetyplusdays + line['columns'][-1]"/>
+                                        </t>
+                                    </t>
+                                    <t t-if="l.journal_id.code == 'CCRN'">
+                                        <t t-set="credits" t-value="credits + line['columns'][-1]"/>
+                                    </t>
+                                    <td><span t-esc="l.move_id.name"/></td>
+                                    <td><span t-esc="l.name"/></td>
+                                    <td><span t-esc="l.debit"/></td>
+                                    <td><span t-esc="l.credit"/></td>
+                                    <td><span t-esc="line['columns'][-1]"/></td>
+                                    <t t-set="total_outstanding" t-value="total_outstanding + line['columns'][-1]"/>
+                                </t>
+                            </tr>
+                        </t>
+                    </tbody>
+                </table>
+                <div class="row text-right" style="margin-right: 20px;">
+                    <hr style="border-color: black"/>
+                    <b>&#160;Total Balance Outstanding  &#160;&#160;</b><span t-esc="total_outstanding" t-options='{"widget": "monetary", "display_currency": company.currency_id}'/>
+                </div>
+                <br/><br/><br/><br/>
+                <br/><br/><br/><br/>
+                <hr style="border-color: black"/>
+                <div class="col-xs-3 text-right">
+                    <span>Aged Analysis</span><br/>
+                    <span>Current</span><br/>
+                    <span>0-30 Days</span><br/>
+                    <span>31-60 Days</span><br/>
+                    <span>61-90 Days</span><br/>
+                    <span>90+ Days</span><br/><br/>
+                    <span class="text-left">Unallocated Credits</span>
+                </div>
+                <div class="col-xs-9 text-left">
+                    <span style="padding-left: -5px;">*&#160;=&#160;Disputed</span><br/>
+                    <span t-esc="due_inv_total"/><br/>
+                    <span t-esc="thirtydays"></span><br/>
+                    <span t-esc="sixtydays"></span><br/>
+                    <span t-esc="ninetydays"></span><br/>
+                    <span t-esc="ninetyplusdays"></span><br/><br/>
+                    <span t-esc="credits"></span>
+                </div>
+            </div>
+        </template>
+
+        <template id="report_customer_overdue">
+            <t t-raw="'&lt;base href=%s&gt;' % base_url"/>
+            <t t-call="report.html_container">
+                <t t-call-assets="web.assets_common" t-css="false" />
+                <t t-call-assets="account_reports.assets_followup_report" />
+                <t t-call="customer_statement_formate.report_followup_letter_doc"/>
+            </t>
+        </template>
+
+    </data>
+</odoo>
