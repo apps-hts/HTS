@@ -15,6 +15,8 @@
     'author': 'Hyperthink Systems Limited',
     'website': 'www.hyperthinkkenya.co.ke',
     'category': 'Reports',
+    'price': 150.00,
+    'currency': 'EUR',
     'depends': [ 'account', 'account_accountant'],
     'data': [
         
